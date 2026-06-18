@@ -1,9 +1,9 @@
 "use client";
 
 import { use } from "react";
-import AccountOverview from "@/components/AccountOverview";
+import GrowthView from "@/components/GrowthView";
 
 export default function Page({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = use(params);
-  return <AccountOverview companyId={companyId} />;
+  return <GrowthView scope={companyId} />;
 }

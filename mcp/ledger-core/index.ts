@@ -5,9 +5,10 @@ import { createCipheriv, createDecipheriv, randomBytes, createHash } from "node:
 import { z } from "zod";
 import * as registry from "./registry.js";
 import { getProvider } from "./stripe-client.js";
-import { checkGuardrails } from "./guardrails.js";
+import { evaluate, recordConsumption } from "./budget.js";
 
 const DRY_RUN = process.argv.includes("--dry-run");
+const HTTP_ONLY = process.argv.includes("--http-only") || process.env.LEDGER_HTTP_ONLY === "1";
 const HTTP_PORT = Number(process.env.MCP_HTTP_PORT ?? 3001);
 
 // ---------- Connect token encryption ----------
@@ -143,21 +144,30 @@ const handlers: Record<string, Handler> = {
   stripe_get_multicurrency_balances: (a) => getProvider(a.company_id).getMultiCurrencyBalances(),
   stripe_get_project_spend: (a) => getProvider(a.company_id).getProjectSpend(a),
 
-  // --- Stripe mutating tools (guarded) ---
+  // --- Stripe mutating tools (guarded by the synchronous cascade) ---
   stripe_update_project_spend_cap: (a) =>
-    guardedAction(a.company_id, "spend", undefined, "comptroller",
-      `Set ${a.provider} spend cap to $${a.limit}`,
-      () => getProvider(a.company_id).updateProjectSpendCap(a)),
+    guardedAction({
+      company_id: a.company_id, agent: "comptroller", workflow: a.workflow ?? a.provider,
+      kind: "spend", action_type: "model_switch", amount: 0,
+      description: `Set ${a.provider} spend cap to $${a.limit}`,
+      exec: () => getProvider(a.company_id).updateProjectSpendCap(a),
+    }),
 
   stripe_send_stablecoin_payment: (a) =>
-    guardedAction(a.company_id, "spend", a.amount, "treasurer",
-      `Send ${a.amount} ${a.currency} to ${a.recipient}`,
-      () => getProvider(a.company_id).sendStablecoinPayment(a)),
+    guardedAction({
+      company_id: a.company_id, agent: "treasurer", workflow: a.workflow ?? "treasury",
+      kind: "spend", action_type: "pay_vendor", amount: a.amount,
+      description: `Send ${a.amount} ${a.currency} to ${a.recipient}`,
+      exec: () => getProvider(a.company_id).sendStablecoinPayment(a),
+    }),
 
   stripe_convert_currency: (a) =>
-    guardedAction(a.company_id, "rebalance", a.amount, "treasurer",
-      `Convert ${a.amount} ${a.from} → ${a.to}`,
-      () => getProvider(a.company_id).convertCurrency(a)),
+    guardedAction({
+      company_id: a.company_id, agent: "treasurer", workflow: a.workflow ?? "treasury",
+      kind: "spend", action_type: "rebalance", amount: a.amount,
+      description: `Convert ${a.amount} ${a.from} → ${a.to}`,
+      exec: () => getProvider(a.company_id).convertCurrency(a),
+    }),
 
   // --- Aggregation tools (for dashboard) ---
   portfolio_summary: () => {
@@ -213,6 +223,93 @@ const handlers: Record<string, Handler> = {
     }));
     return { agents, last_action: last };
   },
+
+  // --- Budget hierarchy tools ---
+  registry_set_company_budget: (a) => registry.setCompanyBudget(a.company_id, a),
+  registry_set_agent_budget: (a) => registry.setAgentBudget(a.company_id, a.agent, a),
+  registry_set_workflow_budget: (a) => registry.setWorkflowBudget(a.company_id, a.workflow, a),
+  registry_set_process_limit: (a) => registry.setProcessLimit(a.company_id, a.workflow, a),
+  registry_get_budget_tree: (a) => registry.getBudgetTree(a.company_id),
+  registry_evaluate: (a) =>
+    evaluate({
+      company_id: a.company_id, agent: a.agent, workflow: a.workflow,
+      kind: a.kind, amount: a.amount, model: a.model, action_type: a.action_type,
+    }),
+  registry_record_consumption: (a) =>
+    recordConsumption({
+      company_id: a.company_id, agent: a.agent, workflow: a.workflow,
+      kind: a.kind, amount: a.amount, model: a.model, run_id: a.run_id,
+    }),
+
+  // --- Dashboard aggregations ---
+  budget_view: (a) => {
+    const scope: string = a?.scope ?? "portfolio";
+    const breach = detectBreach();
+    if (scope === "portfolio") {
+      const { companies } = registry.listCompanies("active");
+      const trees = companies.map((c) => registry.getBudgetTree(c.id)).filter(Boolean);
+      const compute_used = trees.reduce((s, t) => s + (t!.totals.compute_used ?? 0), 0);
+      const compute_cap = trees.reduce((s, t) => s + (t!.totals.compute_cap ?? 0), 0);
+      const spend_used = trees.reduce((s, t) => s + (t!.totals.spend_used ?? 0), 0);
+      const spend_cap = trees.reduce((s, t) => s + (t!.totals.spend_cap ?? 0), 0);
+      return { scope: "portfolio", trees, totals: { compute_used, compute_cap, spend_used, spend_cap }, breach };
+    }
+    const tree = registry.getBudgetTree(scope);
+    if (!tree) throw new Error(`Unknown company: ${scope}`);
+    return { scope, trees: [tree], totals: tree.totals, breach: breach && breach.company_id === tree.company.id ? breach : breach };
+  },
+
+  growth_view: (a) => {
+    const scope: string = a?.scope ?? "portfolio";
+    if (scope === "portfolio") {
+      const { companies } = registry.listCompanies("active");
+      const byMonth: Record<string, { month: string; mrr: number; pnl: number; treasury: number; token_cost: number; margin_w: number; rev: number }> = {};
+      for (const c of companies) {
+        for (const m of growthForCompany(c.id)) {
+          const row = (byMonth[m.month] ??= { month: m.month, mrr: 0, pnl: 0, treasury: 0, token_cost: 0, margin_w: 0, rev: 0 });
+          row.mrr += m.mrr;
+          row.pnl += m.pnl;
+          row.treasury += m.treasury;
+          row.token_cost += m.token_cost;
+          const rev = m.mrr + m.pnl;
+          row.margin_w += m.margin * rev;
+          row.rev += rev;
+        }
+      }
+      const months = Object.values(byMonth)
+        .sort((x, y) => x.month.localeCompare(y.month))
+        .map((r) => ({
+          month: r.month,
+          mrr: +r.mrr.toFixed(2),
+          pnl: +r.pnl.toFixed(2),
+          treasury: +r.treasury.toFixed(2),
+          token_cost: +r.token_cost.toFixed(2),
+          margin: r.rev ? +(r.margin_w / r.rev).toFixed(3) : 0,
+        }));
+      const perCompany = companies.map((c) => ({ company_id: c.id, name: c.name, type: c.type, months: growthForCompany(c.id) }));
+      return { scope: "portfolio", months, per_company: perCompany };
+    }
+    const company = registry.getCompany(scope);
+    if (!company) throw new Error(`Unknown company: ${scope}`);
+    return { scope, months: growthForCompany(company.id), per_company: [{ company_id: company.id, name: company.name, type: company.type, months: growthForCompany(company.id) }] };
+  },
+
+  budget_approve_downgrade: (a) => {
+    const wf = registry.getWorkflowBudget(a.company_id, a.workflow);
+    const log = registry.logAction({
+      company_id: a.company_id,
+      agent: "comptroller",
+      workflow: a.workflow,
+      action_type: "model_switch",
+      description: `Downgraded ${a.workflow} ${a.from_model ?? "ultra"} → ${a.to_model ?? "nemotron-3-mini"} (saves ~$${a.est_savings ?? 0}/mo)`,
+      amount_usd: null,
+      kind: "control",
+      outcome: "executed",
+      guardrail: "within-limits",
+      level_hit: "workflow",
+    });
+    return { approved: true, log_id: log.log_id, workflow: a.workflow, on_breach: wf?.on_breach ?? "downgrade_model" };
+  },
 };
 
 function aggregateTokenMap(
@@ -239,50 +336,102 @@ function aggregateTokenMap(
   };
 }
 
-function guardedAction(
-  company_id: string,
-  action_type: string,
-  amount: number | undefined,
-  agent: string,
-  description: string,
-  exec: () => unknown,
-) {
-  const check = checkGuardrails(company_id, action_type, amount);
+const REMEDY_OUTCOME: Record<string, string> = {
+  throttle: "throttled",
+  escalate: "escalated",
+  downgrade_model: "escalated",
+  pause: "rejected",
+};
+
+function guardedAction(p: {
+  company_id: string;
+  agent: string;
+  workflow: string;
+  kind: "spend" | "compute";
+  action_type: string;
+  amount: number;
+  description: string;
+  model?: string;
+  exec: () => unknown;
+}) {
+  const check = evaluate({
+    company_id: p.company_id,
+    agent: p.agent,
+    workflow: p.workflow,
+    kind: p.kind,
+    amount: p.amount,
+    model: p.model,
+    action_type: p.action_type,
+  });
   if (!check.allowed) {
     registry.logAction({
-      company_id,
-      agent,
-      action_type,
-      description,
-      amount_usd: amount ?? null,
-      outcome: check.requires_escalation ? "escalated" : "rejected",
+      company_id: p.company_id,
+      agent: p.agent,
+      workflow: p.workflow,
+      action_type: p.action_type,
+      description: p.description,
+      amount_usd: p.amount || null,
+      kind: p.kind,
+      outcome: REMEDY_OUTCOME[check.remedy ?? "escalate"] ?? "rejected",
       guardrail: check.reason ?? "blocked",
+      level_hit: check.level_hit ?? null,
     });
     return { executed: false, ...check };
   }
   if (DRY_RUN) {
     registry.logAction({
-      company_id,
-      agent,
-      action_type,
-      description,
-      amount_usd: amount ?? null,
-      outcome: "executed",
-      guardrail: "dry-run (no real mutation)",
+      company_id: p.company_id, agent: p.agent, workflow: p.workflow, action_type: p.action_type,
+      description: p.description, amount_usd: p.amount || null, kind: p.kind,
+      outcome: "executed", guardrail: "dry-run (no real mutation)", level_hit: null,
     });
-    return { executed: true, dry_run: true, description };
+    return { executed: true, dry_run: true, description: p.description };
   }
-  const result = exec();
+  const result = p.exec();
+  if (p.amount > 0)
+    recordConsumption({
+      company_id: p.company_id, agent: p.agent, workflow: p.workflow, kind: p.kind,
+      amount: p.amount, model: p.model,
+    });
   registry.logAction({
-    company_id,
-    agent,
-    action_type,
-    description,
-    amount_usd: amount ?? null,
-    outcome: "executed",
-    guardrail: "within-limits",
+    company_id: p.company_id, agent: p.agent, workflow: p.workflow, action_type: p.action_type,
+    description: p.description, amount_usd: p.amount || null, kind: p.kind,
+    outcome: "executed", guardrail: "within-limits", level_hit: null,
   });
   return { executed: true, ...((result as object) ?? {}) };
+}
+
+// ---------- Budget aggregations for the dashboard ----------
+function detectBreach() {
+  // Scan all active companies for the workflow most over an alert-worthy threshold,
+  // and produce a Comptroller downgrade proposal (drives the Budget breach alert).
+  const { companies } = registry.listCompanies("active");
+  let worst: { company: registry.Company; wf: registry.WorkflowBudget; used: number; pct: number } | null = null;
+  for (const c of companies) {
+    for (const wf of registry.getWorkflowBudgets(c.id)) {
+      if (wf.compute_monthly_cap == null || wf.compute_monthly_cap === 0) continue;
+      const used = registry.windowConsumption(c.id, { workflow: wf.workflow, kind: "compute", window: "month" });
+      const p = (used / wf.compute_monthly_cap) * 100;
+      if (p >= 85 && (!worst || p > worst.pct)) worst = { company: c, wf, used, pct: Math.round(p) };
+    }
+  }
+  if (!worst) return null;
+  const est = Math.round(worst.used * 0.38);
+  return {
+    company_id: worst.company.id,
+    company_name: worst.company.name,
+    workflow: worst.wf.workflow,
+    pct: worst.pct,
+    cap: worst.wf.compute_monthly_cap,
+    used: +worst.used.toFixed(2),
+    from_model: "nemotron-3-ultra",
+    to_model: "nemotron-3-mini",
+    est_savings: est,
+    on_breach: worst.wf.on_breach,
+  };
+}
+
+function growthForCompany(company_id: string) {
+  return registry.getMonthlySeries(company_id);
 }
 
 // ---------- MCP (stdio) registration ----------
@@ -310,11 +459,14 @@ const toolSchemas: Record<string, z.ZodRawShape> = {
   registry_log_action: {
     company_id: z.string(),
     agent: z.string(),
+    workflow: z.string().optional(),
     action_type: z.string(),
     description: z.string(),
     amount_usd: z.number().optional(),
+    kind: z.string().optional(),
     outcome: z.string(),
     guardrail: z.string().optional(),
+    level_hit: z.string().optional(),
   },
   registry_get_action_log: { company_id: z.string().optional(), limit: z.number().optional() },
   stripe_list_charges: {
@@ -358,6 +510,75 @@ const toolSchemas: Record<string, z.ZodRawShape> = {
   portfolio_summary: {},
   company_overview: { company_id: z.string() },
   agent_status: {},
+  registry_set_company_budget: {
+    company_id: z.string(),
+    permission_level: z.string().optional(),
+    spend_monthly_cap: z.number().nullable().optional(),
+    spend_daily_cap: z.number().nullable().optional(),
+    spend_single_cap: z.number().nullable().optional(),
+    compute_monthly_cap: z.number().nullable().optional(),
+    compute_daily_cap: z.number().nullable().optional(),
+    allowed_actions: z.array(z.string()).optional(),
+    escalation_contact: z.string().optional(),
+    hard_stop: z.number().optional(),
+  },
+  registry_set_agent_budget: {
+    company_id: z.string(),
+    agent: z.string(),
+    enabled: z.number().optional(),
+    spend_authority: z.string().optional(),
+    spend_single_cap: z.number().optional(),
+    spend_daily_cap: z.number().optional(),
+    allowed_actions: z.array(z.string()).optional(),
+    compute_monthly_cap: z.number().nullable().optional(),
+    compute_daily_cap: z.number().nullable().optional(),
+    model_ceiling: z.string().optional(),
+  },
+  registry_set_workflow_budget: {
+    company_id: z.string(),
+    workflow: z.string(),
+    owner_agent: z.string().optional(),
+    compute_monthly_cap: z.number().nullable().optional(),
+    spend_monthly_cap: z.number().optional(),
+    margin_floor: z.number().optional(),
+    on_breach: z.string().optional(),
+  },
+  registry_set_process_limit: {
+    company_id: z.string(),
+    workflow: z.string(),
+    per_run_compute_cap: z.number().optional(),
+    per_action_spend_cap: z.number().optional(),
+    max_calls_per_run: z.number().optional(),
+    requires_approval_over: z.number().nullable().optional(),
+  },
+  registry_get_budget_tree: { company_id: z.string() },
+  registry_evaluate: {
+    company_id: z.string(),
+    agent: z.string(),
+    workflow: z.string(),
+    kind: z.enum(["spend", "compute"]),
+    amount: z.number(),
+    model: z.string().optional(),
+    action_type: z.string().optional(),
+  },
+  registry_record_consumption: {
+    company_id: z.string(),
+    agent: z.string().optional(),
+    workflow: z.string().optional(),
+    kind: z.enum(["spend", "compute"]),
+    amount: z.number(),
+    model: z.string().optional(),
+    run_id: z.string().optional(),
+  },
+  budget_view: { scope: z.string().optional() },
+  growth_view: { scope: z.string().optional() },
+  budget_approve_downgrade: {
+    company_id: z.string(),
+    workflow: z.string(),
+    from_model: z.string().optional(),
+    to_model: z.string().optional(),
+    est_savings: z.number().optional(),
+  },
 };
 
 function ok(result: unknown) {
@@ -438,7 +659,10 @@ function startHttp() {
 
 registry.db(); // ensure schema exists
 startHttp();
-startStdio().catch((e) => {
+if (HTTP_ONLY) {
+  console.error("[ledger-core] HTTP-only mode (stdio disabled) — server stays up for dashboard");
+} else
+  startStdio().catch((e) => {
   console.error("[ledger-core] fatal:", e);
   process.exit(1);
 });

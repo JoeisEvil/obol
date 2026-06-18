@@ -6,7 +6,6 @@
       "name": "ledger-core",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.12.0",
-        "qs": "^6.15.2",
         "stripe": "^17.5.0",
         "zod": "^3.24.1",
       },

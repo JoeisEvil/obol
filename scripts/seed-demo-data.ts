@@ -1,6 +1,13 @@
 // Idempotent demo seed. In mock mode this populates the SQLite mock tables that
 // MockProvider reads — no Stripe calls. Run: `bun scripts/seed-demo-data.ts`
-import { db, addCompany } from "../mcp/ledger-core/registry.ts";
+import {
+  db,
+  addCompany,
+  setCompanyBudget,
+  setAgentBudget,
+  setWorkflowBudget,
+  setProcessLimit,
+} from "../mcp/ledger-core/registry.ts";
 
 const d = db();
 
@@ -15,9 +22,63 @@ function clearCompany(companyId: string) {
     "mock_issuing_txns",
     "mock_balances",
     "mock_project_spend",
+    "mock_monthly",
+    "consumption",
+    "company_budget",
+    "agent_budget",
+    "workflow_budget",
+    "process_limit",
   ]) {
     d.prepare(`DELETE FROM ${t} WHERE company_id = ?`).run(companyId);
   }
+}
+
+let consN = 0;
+const stmtCons = d.prepare(
+  `INSERT INTO consumption (id, company_id, agent, workflow, kind, amount_usd, model, ts, run_id)
+   VALUES ($id,$company_id,$agent,$workflow,$kind,$amount,$model,$ts,$run_id)`,
+);
+function insCons(p: {
+  company_id: string;
+  agent?: string | null;
+  workflow?: string | null;
+  kind: "spend" | "compute";
+  amount: number;
+  model?: string | null;
+  daysAgo?: number;
+  run_id?: string | null;
+}) {
+  consN++;
+  stmtCons.run({
+    $id: `cons_${String(consN).padStart(6, "0")}`,
+    $company_id: p.company_id,
+    $agent: p.agent ?? null,
+    $workflow: p.workflow ?? null,
+    $kind: p.kind,
+    $amount: p.amount,
+    $model: p.model ?? null,
+    $ts: daysAgo(p.daysAgo ?? 0),
+    $run_id: p.run_id ?? null,
+  });
+}
+
+const stmtMonthly = d.prepare(
+  `INSERT INTO mock_monthly (company_id, month, mrr, pnl, treasury, token_cost, margin)
+   VALUES ($company_id,$month,$mrr,$pnl,$treasury,$token_cost,$margin)`,
+);
+function insMonthly(company_id: string, rows: { mrr: number; pnl: number; treasury: number; token_cost: number; margin: number }[]) {
+  const months = ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"];
+  rows.forEach((r, i) =>
+    stmtMonthly.run({
+      $company_id: company_id,
+      $month: months[i],
+      $mrr: r.mrr,
+      $pnl: r.pnl,
+      $treasury: r.treasury,
+      $token_cost: r.token_cost,
+      $margin: r.margin,
+    }),
+  );
 }
 
 // bun:sqlite binds named params via $-prefixed keys; this prefixes a bare object.
@@ -249,9 +310,95 @@ function seedUnitAlpha() {
   return { id, name: "Unit Alpha", pnl: winSum - costSum, wins: winBase.length, costs: costBase.length };
 }
 
+// ---------------- Budget trees + consumption ----------------
+function seedBudgetSaas() {
+  const id = "comp_01";
+  setCompanyBudget(id, {
+    permission_level: "full",
+    spend_daily_cap: 2000,
+    spend_single_cap: 500,
+    compute_monthly_cap: 1800,
+    compute_daily_cap: 400,
+    hard_stop: 1,
+  });
+  setAgentBudget(id, "sentinel", { spend_authority: "none", compute_monthly_cap: 400, model_ceiling: "nemotron-3-mini" });
+  setAgentBudget(id, "comptroller", { spend_authority: "execute", spend_daily_cap: 300, allowed_actions: ["model_switch"], compute_monthly_cap: 300 });
+  setAgentBudget(id, "treasurer", { spend_authority: "execute", spend_single_cap: 500, spend_daily_cap: 2000, allowed_actions: ["pay_vendor", "rebalance"] });
+  setAgentBudget(id, "forecaster", { spend_authority: "none", compute_monthly_cap: 700, model_ceiling: "nemotron-3-ultra" });
+  setWorkflowBudget(id, "support-agent", { owner_agent: "sentinel", compute_monthly_cap: 600, margin_floor: 0.55, on_breach: "throttle" });
+  setWorkflowBudget(id, "data-pipeline", { owner_agent: "forecaster", compute_monthly_cap: 500, margin_floor: 0.4, on_breach: "downgrade_model" });
+  setWorkflowBudget(id, "onboarding", { owner_agent: "comptroller", compute_monthly_cap: 250, on_breach: "pause" });
+  setProcessLimit(id, "data-pipeline", { per_run_compute_cap: 0.4, max_calls_per_run: 30 });
+
+  // Agent-attributed compute (workflow=null) + workflow-attributed compute (agent=null) are
+  // disjoint, so company month total = sum of both planes.
+  insCons({ company_id: id, agent: "forecaster", kind: "compute", amount: 400, model: "nemotron-3-ultra" });
+  insCons({ company_id: id, agent: "sentinel", kind: "compute", amount: 180, model: "nemotron-3-mini" });
+  insCons({ company_id: id, agent: "comptroller", kind: "compute", amount: 60 });
+  insCons({ company_id: id, workflow: "support-agent", kind: "compute", amount: 300, daysAgo: 4 });
+  insCons({ company_id: id, workflow: "data-pipeline", kind: "compute", amount: 460, daysAgo: 3 }); // 92% of $500 → breach
+  insCons({ company_id: id, workflow: "onboarding", kind: "compute", amount: 110, daysAgo: 5 });
+  insCons({ company_id: id, workflow: "data-pipeline", kind: "compute", amount: 0.36, run_id: "run_dp_001" });
+}
+
+function seedBudgetAlpha() {
+  const id = "comp_02";
+  setCompanyBudget(id, {
+    permission_level: "full",
+    spend_daily_cap: 3000,
+    spend_single_cap: 800,
+    compute_monthly_cap: 2400,
+    compute_daily_cap: 500,
+    hard_stop: 1,
+  });
+  setAgentBudget(id, "sentinel", { spend_authority: "none", compute_monthly_cap: 500, model_ceiling: "nemotron-3-mini" });
+  setAgentBudget(id, "comptroller", { spend_authority: "execute", spend_daily_cap: 300, allowed_actions: ["model_switch"], compute_monthly_cap: 300 });
+  setAgentBudget(id, "treasurer", { spend_authority: "execute", spend_single_cap: 800, spend_daily_cap: 3000, allowed_actions: ["pay_vendor", "rebalance"] });
+  setAgentBudget(id, "forecaster", { spend_authority: "none", compute_monthly_cap: 900, model_ceiling: "nemotron-3-ultra" });
+  setWorkflowBudget(id, "market-analysis", { owner_agent: "forecaster", compute_monthly_cap: 1200, margin_floor: 0.4, on_breach: "throttle" });
+  setWorkflowBudget(id, "market-win", { owner_agent: "sentinel", compute_monthly_cap: null, spend_monthly_cap: 0, on_breach: "escalate" });
+  setWorkflowBudget(id, "market-data-apis", { owner_agent: "forecaster", spend_monthly_cap: 2000, on_breach: "escalate" });
+  setProcessLimit(id, "market-analysis", { per_run_compute_cap: 0.6, requires_approval_over: 400 });
+
+  // compute (month) → company 1,870 / 2,400 ≈ 78%
+  insCons({ company_id: id, agent: "forecaster", kind: "compute", amount: 548, model: "nemotron-3-ultra" });
+  insCons({ company_id: id, agent: "sentinel", kind: "compute", amount: 220, model: "nemotron-3-mini" });
+  insCons({ company_id: id, agent: "comptroller", kind: "compute", amount: 99 });
+  insCons({ company_id: id, workflow: "market-analysis", kind: "compute", amount: 936, daysAgo: 2 }); // 78% of $1,200
+  insCons({ company_id: id, kind: "compute", amount: 67, daysAgo: 6 }); // unattributed remainder → company total
+  insCons({ company_id: id, workflow: "market-analysis", kind: "compute", amount: 0.31, run_id: "run_ma_001" });
+  // spend: treasurer today (company daily spend $1,200) + market-data-apis backdated (workflow month $1,200)
+  insCons({ company_id: id, agent: "treasurer", kind: "spend", amount: 1200 });
+  insCons({ company_id: id, workflow: "market-data-apis", kind: "spend", amount: 1200, daysAgo: 7 });
+}
+
+function seedMonthly() {
+  // LEDGER SaaS — recurring revenue + treasury build, token cost receding, margin rising.
+  insMonthly("comp_01", [
+    { mrr: 8200, pnl: 0, treasury: 47000, token_cost: 1700, margin: 0.64 },
+    { mrr: 9100, pnl: 0, treasury: 49000, token_cost: 1650, margin: 0.66 },
+    { mrr: 9800, pnl: 0, treasury: 50500, token_cost: 1520, margin: 0.68 },
+    { mrr: 10600, pnl: 0, treasury: 52000, token_cost: 1460, margin: 0.7 },
+    { mrr: 11400, pnl: 0, treasury: 54000, token_cost: 1320, margin: 0.72 },
+    { mrr: 12400, pnl: 0, treasury: 56000, token_cost: 1200, margin: 0.73 },
+  ]);
+  // Unit Alpha — trading P&L compounding, treasury build.
+  insMonthly("comp_02", [
+    { mrr: 0, pnl: 4200, treasury: 23000, token_cost: 980, margin: 0.66 },
+    { mrr: 0, pnl: 5100, treasury: 25000, token_cost: 1000, margin: 0.68 },
+    { mrr: 0, pnl: 5800, treasury: 27000, token_cost: 1010, margin: 0.7 },
+    { mrr: 0, pnl: 6600, treasury: 29000, token_cost: 990, margin: 0.71 },
+    { mrr: 0, pnl: 7400, treasury: 31000, token_cost: 950, margin: 0.73 },
+    { mrr: 0, pnl: 8400, treasury: 33000, token_cost: 936, margin: 0.74 },
+  ]);
+}
+
 const seed = d.transaction(() => {
   const a = seedLedgerSaas();
   const b = seedUnitAlpha();
+  seedBudgetSaas();
+  seedBudgetAlpha();
+  seedMonthly();
   return [a, b] as const;
 });
 

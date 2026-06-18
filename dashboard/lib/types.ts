@@ -60,11 +60,14 @@ export type ActionLogEntry = {
   company_id: string;
   timestamp: string;
   agent: string;
+  workflow?: string | null;
   action_type: string;
   description: string;
   amount_usd: number;
+  kind?: string | null;
   outcome: string;
   guardrail?: string;
+  level_hit?: string | null;
 };
 
 export type CompanyOverview = {
@@ -124,6 +127,68 @@ export type RegistryCompany = {
 export type RegistryList = {
   companies: RegistryCompany[];
   total: number;
+  error?: string;
+  stale?: boolean;
+};
+
+// ---- budget hierarchy ----
+export type BudgetNode = {
+  level: "company" | "agent" | "workflow" | "process";
+  key: string;
+  label: string;
+  kind: "spend" | "compute" | "both";
+  used: number;
+  cap: number | null;
+  pct: number | null;
+  meta?: Record<string, unknown>;
+};
+
+export type BudgetTree = {
+  company: { id: string; name: string; type: string };
+  enforcement: { hard_stop: boolean; permission_level: string };
+  company_node: BudgetNode;
+  agents: BudgetNode[];
+  workflows: BudgetNode[];
+  processes: BudgetNode[];
+  totals: { compute_used: number; compute_cap: number | null; spend_used: number; spend_cap: number | null };
+};
+
+export type Breach = {
+  company_id: string;
+  company_name: string;
+  workflow: string;
+  pct: number;
+  cap: number;
+  used: number;
+  from_model: string;
+  to_model: string;
+  est_savings: number;
+  on_breach: string;
+} | null;
+
+export type BudgetView = {
+  scope: string;
+  trees: BudgetTree[];
+  totals: { compute_used: number; compute_cap: number | null; spend_used: number; spend_cap: number | null };
+  breach: Breach;
+  error?: string;
+  stale?: boolean;
+};
+
+// ---- growth ----
+export type MonthPoint = {
+  month: string;
+  mrr: number;
+  pnl: number;
+  treasury: number;
+  token_cost: number;
+  margin: number;
+};
+
+export type GrowthView = {
+  scope: string;
+  months: MonthPoint[];
+  per_company: { company_id: string; name: string; type: string; months: MonthPoint[] }[];
   error?: string;
   stale?: boolean;
 };
