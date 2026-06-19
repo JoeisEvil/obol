@@ -1,10 +1,10 @@
 ---
 name: company-registry
 description: >
-  Add, list, switch, update, or remove companies in LEDGER's portfolio. Handle
+  Add, list, switch, update, or remove companies in Obol's portfolio. Handle
   Stripe Connect OAuth for client companies. Set per-company guardrails and
   permission levels. This skill is the front door for onboarding any new AI
-  company, autonomous agent business, or client into LEDGER's management.
+  company, autonomous agent business, or client into Obol's management.
   Trigger on: "add company", "register", "connect Stripe", "list companies",
   "switch to [company]", "remove company", "set permission", "update guardrails",
   "what companies do I have", "onboard".
@@ -31,7 +31,7 @@ Use when: you own the company and have direct Stripe API access.
 ## Adding a Company (Stripe Connect)
 
 Use when: adding a client company that doesn't want to share their Stripe key.
-This gives LEDGER read access (or read+write if they authorise) via OAuth.
+This gives Obol read access (or read+write if they authorise) via OAuth.
 
 1. Call `registry_generate_connect_link(company_name, scopes)` 
    - scopes: ["read_only"] for advisory clients, ["read_write"] for managed clients
@@ -46,9 +46,9 @@ This gives LEDGER read access (or read+write if they authorise) via OAuth.
 Call `registry_list_companies()` and format as:
 
 ```
-LEDGER PORTFOLIO — [n] companies
+Obol PORTFOLIO — [n] companies
 
-comp_01 | LEDGER SaaS        | saas           | full      | MRR $12,400
+comp_01 | Obol SaaS        | saas           | full      | MRR $12,400
 comp_02 | Unit Alpha          | trading-agent  | full      | P&L +$8,400/mo
 [comp_03 | Acme AI            | client         | read_only | MRR $34,200]
 ```
@@ -68,7 +68,7 @@ Confirm change and log to action_log.
 
 ## Removing a Company
 
-1. Confirm with user: "This will remove [Company Name] from LEDGER. Stripe connection will be revoked. Confirm?"
+1. Confirm with user: "This will remove [Company Name] from Obol. Stripe connection will be revoked. Confirm?"
 2. If confirmed: call `registry_remove_company(company_id)`
 3. Archive action_log entries (do not delete — audit trail)
 

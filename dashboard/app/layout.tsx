@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600"], variabl
 const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "LEDGER — the book that keeps the books",
+  title: "Obol — the book that keeps the books",
   description: "The financial operating system for your entire AI portfolio.",
 };
 

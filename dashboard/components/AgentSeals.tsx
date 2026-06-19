@@ -45,7 +45,7 @@ export default function AgentSeals() {
         ) : (
           <>
             <div className="t">No actions logged yet</div>
-            <div className="m">LEDGER · STANDING BY</div>
+            <div className="m">Obol · STANDING BY</div>
           </>
         )}
       </span>

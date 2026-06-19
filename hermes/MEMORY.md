@@ -4,11 +4,11 @@
 - Operator: [OPERATOR_NAME]
 - Companies registered: 2 (see Company Registry in MCP)
 - Primary treasury currency: USD
-- Portfolio MRR: ~$12,400 (LEDGER SaaS) + Unit Alpha P&L
+- Portfolio MRR: ~$12,400 (Obol SaaS) + Unit Alpha P&L
 - Active stablecoin accounts: USDC, USDB
 
 ## Registered Companies
-- comp_01 | ledger-saas | LEDGER SaaS | type: saas | permission: full
+- comp_01 | ledger-saas | Obol SaaS | type: saas | permission: full
 - comp_02 | unit-alpha  | Unit Alpha (Prediction Market Bot) | type: trading-agent | permission: full
 
 ## Default Context

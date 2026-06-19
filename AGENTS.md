@@ -1,6 +1,6 @@
-# LEDGER Project
+# Obol Project
 
-Multi-tenant financial OS for AI-native companies. One LEDGER instance,
+Multi-tenant financial OS for AI-native companies. One Obol instance,
 multiple companies, one portfolio view.
 
 ## Project Layout
@@ -28,7 +28,7 @@ multiple companies, one portfolio view.
 - forecaster: scenario planning (multi-company aware)
 
 ## Key Commands
-- `hermes chat`                      Start LEDGER CLI
+- `hermes chat`                      Start Obol CLI
 - `bun run dev` (in dashboard/)      Start dashboard on :3000
 - `bun mcp/ledger-core/index.ts`     Start MCP server (stdio + HTTP)
 - `bun scripts/seed-demo-data.ts`    Seed both demo companies

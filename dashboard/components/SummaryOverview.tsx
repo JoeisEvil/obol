@@ -50,7 +50,7 @@ export default function SummaryOverview() {
       <b>{fmtUSD(data?.portfolio_liquid)}</b> liquid · runway{" "}
       <b>{base === null ? (bear !== null ? `${runwayLabel(bear)}mo bear` : "—") : `${runwayLabel(base)} mo`}</b>
       <br />
-      <span className="kept">kept by LEDGER — autonomous</span>
+      <span className="kept">kept by Obol — autonomous</span>
     </>
   );
 

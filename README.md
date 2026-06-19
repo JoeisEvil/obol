@@ -1,8 +1,8 @@
-# LEDGER
+# Obol
 
 **The financial operating system for your entire AI portfolio.**
 
-One LEDGER instance manages a *portfolio* of AI-native companies — your SaaS, your
+One Obol instance manages a *portfolio* of AI-native companies — your SaaS, your
 trading agent, a client's agency — each with its own Stripe connection, guardrails,
 and permission level. Four sub-agents (Sentinel, Comptroller, Treasurer, Forecaster)
 operate per-company and portfolio-wide.
@@ -15,7 +15,7 @@ operate per-company and portfolio-wide.
 
 ## Mock-first by default
 
-LEDGER runs **end-to-end with zero external keys.** In the default `LEDGER_MODE=mock`,
+Obol runs **end-to-end with zero external keys.** In the default `LEDGER_MODE=mock`,
 every Stripe MCP tool serves realistic seeded data from a local SQLite database
 (`~/.ledger/registry.db`). Drop in real keys and flip `LEDGER_MODE=live` to exercise
 the real Stripe SDK behind the exact same interface.

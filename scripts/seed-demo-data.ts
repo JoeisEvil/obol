@@ -110,7 +110,7 @@ const insProject = d.prepare(
   `INSERT INTO mock_project_spend (company_id, project, provider, spend, cap) VALUES (?,?,?,?,?)`,
 );
 
-// ---------------- Company 1: LEDGER SaaS ----------------
+// ---------------- Company 1: Obol SaaS ----------------
 function seedLedgerSaas() {
   const id = "comp_01";
   clearCompany(id);
@@ -228,7 +228,7 @@ function seedLedgerSaas() {
 
   addCompany({
     id,
-    name: "LEDGER SaaS",
+    name: "Obol SaaS",
     slug: "ledger-saas",
     type: "saas",
     connection_type: "direct_key",
@@ -240,7 +240,7 @@ function seedLedgerSaas() {
     notes: "Flagship SaaS. 47 customers, 8 pre-churn.",
   });
 
-  return { id, name: "LEDGER SaaS", mrr, customers: custN, pastDue: 8 };
+  return { id, name: "Obol SaaS", mrr, customers: custN, pastDue: 8 };
 }
 
 // ---------------- Company 2: Unit Alpha ----------------
@@ -373,7 +373,7 @@ function seedBudgetAlpha() {
 }
 
 function seedMonthly() {
-  // LEDGER SaaS — recurring revenue + treasury build, token cost receding, margin rising.
+  // Obol SaaS — recurring revenue + treasury build, token cost receding, margin rising.
   insMonthly("comp_01", [
     { mrr: 8200, pnl: 0, treasury: 47000, token_cost: 1700, margin: 0.64 },
     { mrr: 9100, pnl: 0, treasury: 49000, token_cost: 1650, margin: 0.66 },
@@ -404,12 +404,12 @@ const seed = d.transaction(() => {
 
 const [saas, alpha] = seed();
 
-console.log("\nLEDGER demo data seeded (mock mode)\n");
+console.log("\nObol demo data seeded (mock mode)\n");
 console.log("┌─────────┬──────────────┬────────────────┬──────────────────────────┐");
 console.log("│ id      │ name         │ type           │ headline                 │");
 console.log("├─────────┼──────────────┼────────────────┼──────────────────────────┤");
 console.log(
-  `│ ${saas.id} │ LEDGER SaaS  │ saas           │ MRR $${saas.mrr.toLocaleString()} (${saas.customers} cust, ${saas.pastDue} past_due) │`,
+  `│ ${saas.id} │ Obol SaaS  │ saas           │ MRR $${saas.mrr.toLocaleString()} (${saas.customers} cust, ${saas.pastDue} past_due) │`,
 );
 console.log(
   `│ ${alpha.id} │ Unit Alpha   │ trading-agent  │ P&L +$${alpha.pnl.toLocaleString()} (${alpha.wins}W/${alpha.costs}C)        │`,

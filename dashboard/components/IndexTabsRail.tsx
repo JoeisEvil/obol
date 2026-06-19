@@ -7,6 +7,7 @@ import useSWR from "swr";
 import type { RegistryList, PortfolioSummary, CompanyMetrics } from "@/lib/types";
 import { fetcher, fmtUSD } from "@/lib/api";
 import AddCompanyModal from "./AddCompanyModal";
+import ObolMark from "./ObolMark";
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const railCfg = { refreshInterval: 60000, revalidateOnFocus: false, keepPreviousData: true } as const;
@@ -32,6 +33,11 @@ export default function IndexTabsRail() {
   return (
     <>
       <nav className="rail">
+        <Link href="/" className="brand-lockup" aria-label="Obol — home">
+          <ObolMark size={28} variant="full" />
+          <span className="brand-word">Obol</span>
+        </Link>
+
         <Link href="/" className={`tab summary${summaryActive ? " active" : ""}`}>
           <div className="lt">§ 00</div>
           <div className="nm">Summary</div>
