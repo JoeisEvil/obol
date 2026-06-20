@@ -2,14 +2,12 @@
 
 ## Portfolio Overview
 - Operator: [OPERATOR_NAME]
-- Companies registered: 2 (see Company Registry in MCP)
+- Companies registered: 0 (see Company Registry in MCP)
 - Primary treasury currency: USD
-- Portfolio MRR: ~$12,400 (Obol SaaS) + Unit Alpha P&L
 - Active stablecoin accounts: USDC, USDB
 
 ## Registered Companies
-- comp_01 | ledger-saas | Obol SaaS | type: saas | permission: full
-- comp_02 | unit-alpha  | Unit Alpha (Prediction Market Bot) | type: trading-agent | permission: full
+- (none yet — add one with the company-registry skill: "add company: <name>")
 
 ## Default Context
 - When no company is specified, operate in portfolio mode
@@ -34,7 +32,7 @@
 - Company-specific query → identify company_id → scope all MCP calls to that company
 - Add company → company-registry skill → registry.add_company() → confirm connection
 - Cross-company insight → Forecaster compares unit economics across companies
-- Unit Alpha P&L → Comptroller reads Issuing transactions tagged unit:unit-alpha → net P&L calculation
+- Trading-agent P&L → Comptroller reads Issuing transactions tagged with the company's unit → net P&L calculation
 
 ## What I Have Learned
 [Written by agent during operation.]

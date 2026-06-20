@@ -48,9 +48,7 @@ Call `registry_list_companies()` and format as:
 ```
 Obol PORTFOLIO — [n] companies
 
-comp_01 | Obol SaaS        | saas           | full      | MRR $12,400
-comp_02 | Unit Alpha          | trading-agent  | full      | P&L +$8,400/mo
-[comp_03 | Acme AI            | client         | read_only | MRR $34,200]
+<company_id> | <name> | <type> | <permission> | <headline metric>
 ```
 
 ## Switching Company Context

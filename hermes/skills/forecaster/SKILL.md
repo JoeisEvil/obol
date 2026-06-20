@@ -36,7 +36,7 @@ requires_mcp: ledger-core
    - Portfolio runway = portfolio treasury / portfolio net burn
 3. Compute cross-company dependencies:
    - Is any company's revenue subsidising another's burn?
-   - If the highest-P&L company (e.g. Unit Alpha) had a bad month, what is the impact?
+   - If the highest-P&L company had a bad month, what is the impact?
    - What is the minimum viable configuration of companies to maintain positive portfolio runway?
 4. Scenarios: base/bear/bull for the portfolio as a whole
 
@@ -48,17 +48,17 @@ Always: identify which company you're answering about (or "portfolio").
 
 Example — portfolio query:
 Q: "What's our overall runway?"
-A: "Portfolio runway is 11 months base case, with Obol SaaS reaching profitability
-    in 8 months and Unit Alpha covering approximately $3,200/month of infrastructure
-    costs during that period. Bear case (Unit Alpha flat, SaaS churn +2x): 6 months.
-    Single highest-leverage action: the Comptroller's data-pipeline model switch saves
-    $4,200/month — do that first."
+A: "Portfolio runway is [n] months base case, with the SaaS company reaching
+    profitability in [n] months and the trading agent covering approximately
+    $[x]/month of shared infrastructure during that period. Bear case (trading flat,
+    SaaS churn +2x): [n] months. Single highest-leverage action: the Comptroller's
+    model switch on the heaviest workflow saves $[x]/month — do that first."
 
 Example — cross-company dependency:
 Q: "What happens if the trading bot has a bad month?"
-A: "If Unit Alpha earns zero in a given month, portfolio runway compresses by 23 days
-    because it currently subsidises $3,200 of shared infrastructure. Obol SaaS
-    still reaches profitability before portfolio cash runs out. Not catastrophic,
+A: "If the trading agent earns zero in a given month, portfolio runway compresses by
+    [n] days because it currently subsidises $[x] of shared infrastructure. The SaaS
+    company still reaches profitability before portfolio cash runs out. Not catastrophic,
     but you'd want the Comptroller to cut inference spend by 15% as a buffer."
 
 ## Tools

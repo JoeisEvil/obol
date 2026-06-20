@@ -77,7 +77,7 @@ obol/
 │   └── skills/             sentinel · comptroller · treasurer · forecaster · company-registry
 ├── mcp/ledger-core/        Multi-tenant MCP server: Stripe + Company Registry + cascade enforcement
 ├── dashboard/              Next.js "living ledger" UI — portfolio, company, budget & growth views
-├── scripts/                seed-demo-data · install-skills
+├── scripts/                install-skills
 └── brand/                  Obol mark (full / flat / mono / reversed), favicons
 ```
 
@@ -85,7 +85,7 @@ obol/
 
 ## Quick start
 
-> **Prerequisites:** Node 20+, the `hermes` CLI, two Stripe test-mode keys (one per demo company), an NVIDIA API key (Nemotron 3 Ultra via Nous Portal or NIM).
+> **Prerequisites:** Node 20+, the `hermes` CLI, a Stripe key (test or live mode) for each company you connect, an NVIDIA API key (Nemotron 3 Ultra via Nous Portal or NIM).
 
 ```bash
 # 1 · install
@@ -94,17 +94,17 @@ cd dashboard && npm install && cd ..
 
 # 2 · configure
 cp .env.example .env
-#   fill: STRIPE_KEY_OBOL_SAAS, STRIPE_KEY_UNIT_ALPHA,
-#         NVIDIA_API_KEY, OBOL_ENCRYPT_KEY (any 32-char string)
+#   fill: NVIDIA_API_KEY, LEDGER_ENCRYPT_KEY (any 32-char string),
+#         and a Stripe key per company you intend to connect.
+#   Set LEDGER_MODE=live to drive the real Stripe SDK.
 
 # 3 · install Hermes skills + config
 chmod +x scripts/install-skills.sh && ./scripts/install-skills.sh
 hermes config set model nvidia:nemotron-3-ultra
 hermes config edit          # add the ledger-core MCP block (see install output)
-
-# 4 · seed two demo companies into Stripe test mode + the registry
-npx tsx scripts/seed-demo-data.ts
 ```
+
+The registry starts **empty** — you onboard your own companies (see *Run it* below). No demo data is bundled.
 
 ### Run it (3 terminals)
 
@@ -119,12 +119,13 @@ cd dashboard && npm run dev          # → http://localhost:3000
 hermes chat
 ```
 
-### Verify
+### Onboard your first company
 
 ```text
-hermes chat ▸ list companies        → shows 2 companies
-hermes chat ▸ run portfolio check   → all 4 sub-agents report in < 90s
-dashboard   ▸ localhost:3000        → portfolio view, both companies populated
+hermes chat ▸ add company: Acme AI          → onboards via direct key or Stripe Connect
+hermes chat ▸ list companies                → shows the company you just added
+hermes chat ▸ run portfolio check           → all 4 sub-agents report in < 90s
+dashboard   ▸ localhost:3000                → portfolio view, your company populated
 ```
 
 ---
@@ -133,7 +134,7 @@ dashboard   ▸ localhost:3000        → portfolio view, both companies populat
 
 ```text
 "What's our overall runway?"                  → Forecaster, portfolio-wide
-"How is Unit Alpha doing this month?"          → switches context, deep scan
+"How is <company> doing this month?"           → switches context, deep scan
 "Where are we leaking money?"                  → Sentinel + Comptroller
 "Add company: Acme AI"                         → onboarding via Stripe Connect
 "Which workflow has the worst inference ROI?"  → cross-company Comptroller view
